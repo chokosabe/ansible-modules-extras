@@ -1,52 +1,48 @@
 #!/usr/bin/python
 #
-# (c) 2014, Rob White <wimnat@gmail.com>
-#
-# This file is part of Ansible
-#
-# Ansible is free software: you can redistribute it and/or modify
+# This is a free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
 # the Free Software Foundation, either version 3 of the License, or
 # (at your option) any later version.
 #
-# Ansible is distributed in the hope that it will be useful,
+# This Ansible library is distributed in the hope that it will be useful,
 # but WITHOUT ANY WARRANTY; without even the implied warranty of
 # MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 # GNU General Public License for more details.
 #
 # You should have received a copy of the GNU General Public License
-# along with Ansible.  If not, see <http://www.gnu.org/licenses/>.
+# along with this library.  If not, see <http://www.gnu.org/licenses/>.
 
 DOCUMENTATION = """
 ---
 module: elastictranscoder
-short_description: Create or delete AWS Elastic Transcoder Pipelines
+short_description: Manage AWS Elastic Transcoder Pipelines
 description:
-  - Can create or delete AWS Elastic Transcoder Pipelines
+  - Manage AWS Elastic Transcoder Pipelines
 notes:
   - "This module assumes pipeline name is unique but this is not enforced by AWS."
   - "Pipelines require an IAM ARN for the transcoder role, s3 buckets for the input and output of media and optionally 
     SNS notification topics for event notifications. All these artifacts must be created prior to using this module."
-  - output_bucket can only be used in creation of the pipeline. It can not be updated after creation.
-version_added: "1.8"
-author: Rob White
+  - "output_bucket can only be used in creation of the pipeline. It can not be updated after creation."
+version_added: "2.0"
+author: Rob White, wimnat [at] gmail.com, @wimnat
 options:
   state:
     description:
-      - register or deregister the instance
-    required: true
-    choices: ['present', 'absent']
+      - register or deregister the pipeline.
+    required: false
+    default: present
   name:
     description:
       - The name of the pipeline. Amazon recommend that the name be unique within the AWS account, but uniqueness is not enforced.
     required: true
   input_bucket:
     description:
-      - The Amazon S3 bucket in which you saved the media files that you want to transcode
+      - The Amazon S3 bucket in which you save the media files that you want to transcode.
     required: true
   output_bucket:
     description:
-      - The Amazon S3 bucket in which you want Elastic Transcoder to save the transcoded files
+      - The Amazon S3 bucket in which you want Elastic Transcoder to save the transcoded files.
     required: true
   notifications:
     description:
@@ -54,7 +50,7 @@ options:
     required: false
   role:
     description:
-      - The IAM Amazon Resource Name (ARN) for the role that you want Elastic Transcoder to use to create the pipeline
+      - The IAM Amazon Resource Name (ARN) for the role that you want Elastic Transcoder to use to create the pipeline.
     required: false
 extends_documentation_fragment: aws
 """
@@ -80,9 +76,9 @@ from ansible.module_utils.ec2 import *
 try:
     import boto.elastictranscoder
     from boto.exception import BotoServerError
+    HAS_BOTO = True
 except ImportError:
-    print "failed=True msg='boto required for this module'"
-    sys.exit(1)
+    HAS_BOTO = False
 
 # notifications dictionary only accepts parameters with first letter capitalized e.g. Warning
 def fix_up_notifications_dict(dictionary):
@@ -186,13 +182,19 @@ def main():
     )
 
     module = AnsibleModule(argument_spec=argument_spec)
+	
+	if not HAS_BOTO:
+        module.fail_json(msg='boto required for this module')
+	
+	region, ec2_url, aws_connect_params = get_aws_connection_info(module)
 
-    region, ec2_url, aws_connect_params = get_aws_connection_info(module)
-
-    try:
-        connection = connect_to_aws(boto.elastictranscoder, region, **aws_connect_params)
-    except (boto.exception.NoAuthHandlerFound, StandardError), e:
-        module.fail_json(msg=str(e))
+    if region:
+        try:
+            connection = connect_to_aws(boto.elastictranscoder, region, **aws_connect_params)
+        except (boto.exception.NoAuthHandlerFound, StandardError), e:
+            module.fail_json(msg=str(e))
+    else:
+        module.fail_json(msg="region must be specified")
 
     state = module.params.get('state')
 
