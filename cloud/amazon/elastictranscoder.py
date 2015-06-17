@@ -25,13 +25,14 @@ notes:
     SNS notification topics for event notifications. All these artifacts must be created prior to using this module."
   - "output_bucket can only be used in creation of the pipeline. It can not be updated after creation."
 version_added: "2.0"
-author: Rob White, wimnat [at] gmail.com, @wimnat
+author: Rob White (@wimnat)
 options:
   state:
     description:
       - register or deregister the pipeline.
     required: false
     default: present
+	choices: [ 'present', 'absent' ]
   name:
     description:
       - The name of the pipeline. Amazon recommend that the name be unique within the AWS account, but uniqueness is not enforced.
@@ -42,7 +43,7 @@ options:
     required: true
   output_bucket:
     description:
-      - The Amazon S3 bucket in which you want Elastic Transcoder to save the transcoded files.
+      - The Amazon S3 bucket that you want Elastic Transcoder to save the transcoded files. This can not be updated after creation of the pipeline.
     required: true
   notifications:
     description:
@@ -183,10 +184,10 @@ def main():
 
     module = AnsibleModule(argument_spec=argument_spec)
 	
-	if not HAS_BOTO:
+    if not HAS_BOTO:
         module.fail_json(msg='boto required for this module')
 	
-	region, ec2_url, aws_connect_params = get_aws_connection_info(module)
+    region, ec2_url, aws_connect_params = get_aws_connection_info(module)
 
     if region:
         try:
