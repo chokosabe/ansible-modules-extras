@@ -17,13 +17,13 @@
 # WANT_JSON
 # POWERSHELL_COMMON
 
-$params = Parse-Args $args
+#$params = Parse-Args $args
 
-Dim ec2_metadata_uri = 'http://169.254.169.254/latest/meta-data/'
-Dim ec2_sshdata_uri  = 'http://169.254.169.254/latest/meta-data/public-keys/0/openssh-key'
-Dim ec2_userdata_uri = 'http://169.254.169.254/latest/user-data/'
-Dim data = @{}
-Dim prefix = 'ansible_ec2'
+$ec2_metadata_uri = 'http://169.254.169.254/latest/meta-data/'
+$ec2_sshdata_uri  = 'http://169.254.169.254/latest/meta-data/public-keys/0/openssh-key'
+$ec2_userdata_uri = 'http://169.254.169.254/latest/user-data/'
+$global:data = @{}
+$prefix = 'ansible_ec2'
 
 # result
 $result = New-Object psobject @{
@@ -32,107 +32,47 @@ $result = New-Object psobject @{
 
 Function _Fetch($url) {
 
-	$result = Invoke-RestMethod -Uri $url -PassThru
-	if ($result.code == 200) {
-		return $result.message
-	} else {
-		return Null
-	}
+	Invoke-RestMethod -Uri $url
+    #Write-Host ($rest_result | Out-String)
+	#if ($rest_result.code -eq 200) {
+#		$result.Add('bla', $rest_result.message)
+#	} else {
+#		$result.Add('bla', $rest_result.message)
+#    }
+    #return
 	
 }
 
-# path
-$path = Get-Attr $params "path" $FALSE
-If ($path -eq $FALSE)
-{
-    $path = Get-Attr $params "dest" $FALSE
-    If ($path -eq $FALSE)
-    {
-        $path = Get-Attr $params "name" $FALSE
-        If ($path -eq $FALSE)
-        {
-            Fail-Json (New-Object psobject) "missing required argument: path"
+Function Fetch($uri) {
+
+    $raw_subfields = (_Fetch $uri)
+    Write-Host ($raw_subfields | Out-String)
+    $subfields = ($raw_subfields -split '[\n]') |? {$_}
+
+    Write-Host $subfields
+
+    foreach ($field in $subfields) {
+        If ($field.EndsWith("/")) {
+            Fetch($uri + $field)
+            #Write-Host $field
+        } 
+        
+        If ($uri.EndsWith("/")) {
+            $new_uri = $uri + $field
+        } Else {
+            $new_uri = $uri + "/" + $field
+            #$global:data.Add($field, _Fetch($uri + $field))
+            #Write-Host $field
+            #Write-Host (_Fetch($uri + $field) | Out-String)
         }
-    }
-}
-
-# JH Following advice from Chris Church, only allow the following states
-# in the windows version for now:
-# state - file, directory, touch, absent
-# (originally was: state - file, link, directory, hard, touch, absent)
-
-$state = Get-Attr $params "state" "unspecified"
-# if state is not supplied, test the $path to see if it looks like 
-# a file or a folder and set state to file or folder
-
-# result
-$result = New-Object psobject @{
-    changed = $FALSE
-}
-
-If ( $state -eq "touch" )
-{
-    If(Test-Path $path)
-    {
-        (Get-ChildItem $path).LastWriteTime = Get-Date
-    }
-    Else
-    {
-        echo $null > $path
-    }
-    $result.changed = $TRUE
-}
-
-If (Test-Path $path)
-{
-    $fileinfo = Get-Item $path
-    If ( $state -eq "absent" )
-    {   
-        Remove-Item -Recurse -Force $fileinfo
-        $result.changed = $TRUE
-    }
-    Else
-    {
-        # Only files have the .Directory attribute.
-        If ( $state -eq "directory" -and $fileinfo.Directory )
-        {
-            Fail-Json (New-Object psobject) "path is not a directory"
-        }
-
-        # Only files have the .Directory attribute.
-        If ( $state -eq "file" -and -not $fileinfo.Directory )
-        {
-            Fail-Json (New-Object psobject) "path is not a file"
-        }
-
-    }
-}
-Else
-# doesn't yet exist
-{
-    If ( $state -eq "unspecified" )
-    {
-        $basename = Split-Path -Path $path -Leaf
-        If ($basename.length -gt 0) 
-        {
-           $state = "file"
-        }
-        Else
-        {
-           $state = "directory"
+        Write-Host $new_uri
+        If (-Not ($new_uri.EndsWith("/"))) {
+            Write-Host (_Fetch($new_uri) | Out-String)
         }
     }
 
-    If ( $state -eq "directory" )
-    {
-        New-Item -ItemType directory -Path $path
-        $result.changed = $TRUE
-    }
-
-    If ( $state -eq "file" )
-    {
-        Fail-Json (New-Object psobject) "path will not be created"
-    }
 }
 
-Exit-Json $result
+Write-Host (Fetch($ec2_metadata_uri))
+
+#Write-Host ($result | Out-String)
