@@ -82,7 +82,7 @@ auto_scaling_group_arn:
     description: The Amazon Resource Name of the ASG
     returned: success
     type: string
-    sample: "arn:aws:autoscaling:us-west-2:722373842436:autoScalingGroup:10787c52-0bcb-427d-82ba-c8e4b008ed2e:autoScalingGroupName/public-webapp-production-1"
+    sample: "arn:aws:autoscaling:us-west-2:1234567890:autoScalingGroup:10787c52-0bcb-427d-82ba-c8e4b008ed2e:autoScalingGroupName/public-webapp-production-1"
 auto_scaling_group_name:
     description: Name of autoscaling group
     returned: success
@@ -299,9 +299,9 @@ def find_asgs(conn, module, name=None, tags=None):
         module.fail_json(msg=e.message, **camel_dict_to_snake_dict(e.response))
 
     matched_asgs = []
+    name_prog = re.compile(r'^' + name)
     for asg in asgs['AutoScalingGroups']:
         if name:
-            name_prog = re.compile(r'^' + name)
             matched_name = name_prog.search(asg['auto_scaling_group_name'])
         else:
             matched_name = True
