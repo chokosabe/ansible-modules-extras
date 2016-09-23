@@ -40,17 +40,24 @@ options:
     revision:
         description:
             - A revision number for the task definition
-        required: False
+        required: false
         type: int
     containers:
         description:
             - A list of containers definitions 
-        required: False
+        required: false
         type: list of dicts with container definitions
+    revise:
+        decsription:
+            - If this option is yes then every time the task is run, a new task defintion will be created
+        required: false
+        type: bool
+        default: no
+        choices: [ 'yes', 'no' ]
     volumes:
         description:
             - A list of names of volumes to be attached
-        required: False
+        required: false
         type: list of name
 extends_documentation_fragment:
     - aws
@@ -126,7 +133,8 @@ class EcsTaskManager:
         try:
             response = self.ecs.describe_task_definition(taskDefinition=task_name)
             return response['taskDefinition']
-        except botocore.exceptions.ClientError:
+        except botocore.exceptions.ClientError as e:
+            self.module.fail_json(msg=e.message, **camel_dict_to_snake_dict(e.response))
             return None
 
     def register_task(self, family, container_definitions, volumes):
@@ -138,25 +146,27 @@ class EcsTaskManager:
         response = self.ecs.deregister_task_definition(taskDefinition=taskArn)
         return response['taskDefinition']
 
+
 def main():
 
     argument_spec = ec2_argument_spec()
     argument_spec.update(dict(
-        state=dict(required=True, choices=['present', 'absent'] ),
-        arn=dict(required=False, type='str' ),
-        family=dict(required=False, type='str' ),
-        revision=dict(required=False, type='int' ),
-        containers=dict(required=False, type='list' ),
-        volumes=dict(required=False, type='list' )
+        state=dict(required=True, choices=['present', 'absent']),
+        arn=dict(required=False, type='str'),
+        family=dict(required=False, type='str'),
+        revise=dict(required=False, default=False, type='bool'),
+        revision=dict(required=False, type='int'),
+        containers=dict(required=False, type='list'),
+        volumes=dict(required=False, type='list')
     ))
 
     module = AnsibleModule(argument_spec=argument_spec, supports_check_mode=True)
 
     if not HAS_BOTO:
-      module.fail_json(msg='boto is required.')
+        module.fail_json(msg='boto is required.')
 
     if not HAS_BOTO3:
-      module.fail_json(msg='boto3 is required.')
+        module.fail_json(msg='boto3 is required.')
 
     task_to_describe = None
     # When deregistering a task, we can specify the ARN OR
@@ -168,12 +178,13 @@ def main():
             task_to_describe = module.params['family']+":"+str(module.params['revision'])
         else:
             module.fail_json(msg="To use task definitions, an arn or family and revision must be specified")
+
     # When registering a task, we can specify the ARN OR
     # the family and revision.
     if module.params['state'] == 'present':
-        if not 'family' in module.params:
+        if 'family' not in module.params:
             module.fail_json(msg="To use task definitions, a family must be specified")
-        if not 'containers' in module.params:
+        if 'containers' not in module.params:
             module.fail_json(msg="To use task definitions, a list of containers must be specified")
         task_to_describe = module.params['family']
 
@@ -181,9 +192,11 @@ def main():
     existing = task_mgr.describe_task(task_to_describe)
 
     results = dict(changed=False)
+    revise = module.params['revise']
+
     if module.params['state'] == 'present':
-        if existing and 'status' in existing and existing['status']=="ACTIVE":
-            results['taskdefinition']=existing
+        if existing and 'status' in existing and existing['status'] == "ACTIVE" and not revise:
+            results['taskdefinition'] = existing
         else:
             if not module.check_mode:
                 # doesn't exist. create it.
